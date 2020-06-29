@@ -1,2 +1,0 @@
-# learndesk.co.in
-tutorials
