@@ -24,6 +24,7 @@
   
     @include media-query($on-mobile) {
       padding-right: 45px;
+      padding-left: 5%;
     }
 }
 
@@ -40,7 +41,9 @@
     @include media-query($on-mobile) {
       width: 50px;
       height: 50px;
-      margin-top: -25px;
+      background: none;
+      left: 0;
+      top: 85%;
     }
 }
 
