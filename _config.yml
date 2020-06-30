@@ -4,6 +4,7 @@ theme: jekyll-theme-leaf
 permalink: :slug
 
 social:
+  twitter: sayeekrish
   github: sayeekrish
 
 plugins:
