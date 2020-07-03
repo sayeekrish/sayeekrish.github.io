@@ -1,7 +1,7 @@
 ---
 layout: post
 author: SaiKrishna Mallupattu
-title: Build a REST API in Kotlin and Go with AWS Lambda, API Gateway, DynamoDB and Serverless Framework | Amazon Web Services
+title: Build a REST API in Kotlin with AWS Lambda, API Gateway, DynamoDB and Serverless Framework | Amazon Web Services
 ---
 
 In this tutorial, I am going to walk you through the steps involved to build an REST api in combination with serverless framework, aws lambda, api gateway and DynamoDB. Before getting into the details, lets understand why should we choose building an API in this way?
