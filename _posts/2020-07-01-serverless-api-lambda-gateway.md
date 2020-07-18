@@ -134,7 +134,7 @@ functions:
           method: delete
 ```
 
-for post and put method, generally content-type is mandatory in all the client requests. So set the content-type header is mandatory
+For post and put method, generally content-type is mandatory. So setting the content-type header as mandatory
 
 ```yaml
 functions:
@@ -165,7 +165,6 @@ functions:
 ```
 
 For tracking and debugging purposes, I am introducing a header in request and also making it mandatory
-
 
 ```yaml
 functions:
