@@ -4,7 +4,7 @@ author: SaiKrishna Mallupattu
 title: Build a REST API in Kotlin with AWS Lambda, API Gateway, DynamoDB and Serverless Framework | Amazon Web Services
 ---
 
-In this tutorial, I am going to walk you through the steps involved to build an REST api in combination with serverless framework, aws lambda, api gateway and DynamoDB. Here are few advantages and disadvantages doing it this way.
+In this post, I am going to show you the steps involved to build an REST api in combination with serverless framework, aws lambda, api gateway and DynamoDB. Here are few advantages and disadvantages doing it this way.
 
 ###### Advantages:
 
@@ -14,10 +14,10 @@ In this tutorial, I am going to walk you through the steps involved to build an 
     4. Cost Effective in unpredictable workload
 
 ###### Disadvantages:
-    1. Not for long running processes.
-    2. Vendor lock-in
+    1. Not for long running processes (30 sec is the limit for the lambda service when you use along with API Gateway)
+    2. Vendor lock-in.
 
-I am taking a simple usecase here, an todo app to show you basic operations like create, get, update and delete an task.
+I am taking a simple usecase here, a post API to add a task, full implementation of this article can be found in the github project
 
 ###### Software Requirements:
     1. Nodejs
@@ -65,7 +65,7 @@ functions:
 
 ```
 
-We are going to have 5 functions in total. List them under functions section
+We are going to have 5 API's. Each API will have its own function. List them all under functions section.
 
 ```yaml
 service: todos
@@ -78,17 +78,9 @@ package:
 functions:
   todo-post:
     handler: in.co.learndesk.todos.TodoRequestHandler::handleRequest
-  todo-put:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handlePutRequest
-  todo-get:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetRequest
-  todo-get-all:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetAllRequest
-  todo-delete:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleDeleteRequest
 ```
 
-Now attach http endpoint for each of these functions along with its Http method
+Now attach an http endpoint for each of these functions along with its Http method
 
 ```yaml
 functions:
@@ -100,41 +92,9 @@ functions:
           path: user/{userId}/todo
           integration: lambda_proxy
           method: post
-  todo-put:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handlePutRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos/{todoId}
-          integration: lambda_proxy
-          method: post
-  todo-get:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos/{todoId}
-          integration: lambda_proxy
-          method: get
-  todo-get-all:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetAllRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos
-          integration: lambda_proxy
-          method: get
-  todo-delete:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleDeleteRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos/{todoId}
-          integration: lambda_proxy
-          method: delete
 ```
 
-For post and put method, generally content-type is mandatory. So setting the content-type header as mandatory
+Generally content-type is mandatory for all post methods. So setting the content-type header as mandatory
 
 ```yaml
 functions:
@@ -150,21 +110,9 @@ functions:
             parameters:
               headers:
                 Content-Type: true
-  todo-put:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handlePutRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos/{todoId}
-          integration: lambda_proxy
-          method: post
-          request:
-            parameters:
-              headers:
-                Content-Type: true
 ```
 
-For tracking and debugging purposes, I am introducing a header in request and also making it mandatory
+For tracking purpose, I am introducing a header to the request and response and making it as mandatory
 
 ```yaml
 functions:
@@ -181,53 +129,176 @@ functions:
               headers:
                 Content-Type: true
                 appRequestId: true
-todo-put:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handlePutRequest
+```
+
+We have to take extra care when dealing with post and put methods. These methods generally carry request body and we must validate it. We can't do all this inside a lambda function. Doing it this way will also incur more cost from us. Because even for false request, our lambda function is being invoked and executed. API Gateway will help us to validate request body, path parameters and allow only well structured requests to the lambda service. 
+
+This requires you to install `serverless-reqvalidator-plugin` an npm module to make use of validator on method.
+
+```cmd 
+npm i serverless-reqvalidator-plugin
+```
+
+In serverless.yml specify the installed plugin under plugins section
+
+```yaml
+plugins:
+  - serverless-reqvalidator-plugin
+```
+
+In serverless.yml create custom resource for request validators
+
+
+```yaml
+resources:
+  Resources:
+    TodoRequestValidator:
+      Type: "AWS::ApiGateway::RequestValidator"
+      Properties:
+        Name: 'todo-request-validator'
+        RestApiId:  !Ref ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: true
+```
+
+For every function you wish to use the validator set property `reqValidatorName: TodoRequestValidator` to match resource you described
+
+```yaml
+functions:
+  todo-post:
+    handler: in.co.learndesk.todos.TodoRequestHandler::handleRequest
     events:
       - http:
           cors: true
-          path: user/{userId}/todos/{todoId}
+          path: user/{userId}/todo
           integration: lambda_proxy
           method: post
+          reqValidatorName: TodoRequestValidator
           request:
             parameters:
               headers:
-                Content-Type: true          
+                Content-Type: true
                 appRequestId: true
-  todo-get:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetRequest
+```
+
+Now comes the model definition on how the request body should be. We are going to use an another serverless plugin `serverless-aws-documentation` that adds support for documentation and models
+
+```cmd 
+npm i serverless-aws-documentation
+```
+
+Next, add the serverless-aws-documenation plugin into serverless.yml file:
+
+```yaml
+plugins:
+  - serverless-reqvalidator-plugin
+  - serverless-aws-documentation
+```
+
+Define the model
+
+```yaml
+custom:
+  documentation:
+    api:
+      info:
+        version: '1.0.0'
+        title: Todo app
+    models:
+      - name: TodoRequestModel
+        contentType: application/json
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            isComplete:
+              type: boolean           
+            category:
+              type: array
+              items:
+                type: string
+                uniqueItems: true
+                minItems: 1
+                enum: ["HOME", "WORK"]
+          required: [name, isComplete, category]
+```
+
+Next add the model on to the method
+
+```yaml
+functions:
+  todo-post:
+    handler: in.co.learndesk.todos.TodoRequestHandler::handleRequest
     events:
       - http:
+          documentation:
+            summary: Create an item
+            description: Add a new item to the todo list
+            requestModels:
+              "application/json": TodoRequestModel
           cors: true
-          path: user/{userId}/todos/{todoId}
+          path: user/{userId}/todo
           integration: lambda_proxy
-          method: get
+          method: post
+          reqValidatorName: TodoRequestValidator
           request:
             parameters:
               headers:
+                Content-Type: true
                 appRequestId: true
-  todo-get-all:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleGetAllRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos
-          integration: lambda_proxy
-          method: get
-          request:
-            parameters:
-              headers:
-                appRequestId: true
-  todo-delete:
-    handler: in.co.learndesk.todos.TodoRequestHandler::handleDeleteRequest
-    events:
-      - http:
-          cors: true
-          path: user/{userId}/todos/{todoId}
-          integration: lambda_proxy
-          method: delete
-          request:
-            parameters:
-              headers:
-                appRequestId: true
+```
+Now we have given full responsibility to gateway service to validate our API's before it calls our lambda function. API Gateway has default template defined, But We can customize to our needs. Also as I said at the begining, We should add appResponseId header to trace the response. Here is the place to do it. Add the below part to the existing resources section:
+
+```yaml
+    Unauthorized:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.appResponseId: method.request.header.appResponseId
+        ResponseTemplates:
+          "application/json": '{"responseHeader":{"statusCode":401,"statusMessage":"Requested resource is restricted and requires authentication"}}'
+        ResponseType: UNAUTHORIZED
+        RestApiId:  !Ref ApiGatewayRestApi
+        StatusCode: 401
+    Forbidden:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.appResponseId: method.request.header.appResponseId
+        ResponseTemplates:
+          "application/json": '{"responseHeader":{"statusCode":403,"statusMessage":"User is not authorized to access this resource"}}'
+        ResponseType: ACCESS_DENIED
+        RestApiId:  !Ref ApiGatewayRestApi
+        StatusCode: 403
+    BadRequest:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.appResponseId: method.request.header.appResponseId
+        ResponseTemplates:
+          "application/json": '{"responseHeader":{"statusCode":400,"statusMessage":"Request was malformed or syntactically incorrect"}}'
+        ResponseType: BAD_REQUEST_BODY
+        RestApiId:  !Ref ApiGatewayRestApi
+        StatusCode: 400
+    BadRequestParameters:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.appResponseId: method.request.header.appResponseId
+        ResponseTemplates:
+          "application/json": '{"responseHeader":{"statusCode":400,"statusMessage":"Request was malformed or syntactically incorrect"}}'
+        ResponseType: BAD_REQUEST_PARAMETERS
+        RestApiId:  !Ref ApiGatewayRestApi
+        StatusCode: 400
+    ResourceNotFound:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.appResponseId: method.request.header.appResponseId
+        ResponseTemplates:
+          "application/json": '{"responseHeader":{"statusCode":404,"statusMessage":"Malformed or unknown URI"}}'
+        ResponseType: RESOURCE_NOT_FOUND
+        RestApiId:  !Ref ApiGatewayRestApi
+        StatusCode: 404
 ```
